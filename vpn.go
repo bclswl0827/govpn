@@ -20,6 +20,7 @@ const (
 	ProtocolSoftEther Protocol = "softether"
 	ProtocolSSH       Protocol = "ssh"
 	ProtocolL2TP      Protocol = "l2tp"
+	ProtocolMASQUE    Protocol = "masque"
 )
 
 // Starter is the common lifecycle implemented by every protocol client and
@@ -48,16 +49,17 @@ type PacketDevice interface {
 type Session struct {
 	stack *userspacestack.Stack
 
-	closeTransport func() error
-	terminalDone   chan struct{}
-	terminalMu     sync.RWMutex
-	terminalErr    error
-	closeOnce      sync.Once
-	closeErr       error
-	forwardMu      sync.Mutex
-	forwardAliases map[netip.Addr]int
-	forwards       map[*PortForward]struct{}
-	closed         bool
+	closeTransport    func() error
+	terminalDone      chan struct{}
+	terminalMu        sync.RWMutex
+	terminalErr       error
+	closeOnce         sync.Once
+	closeErr          error
+	forwardMu         sync.Mutex
+	assignedAddresses []netip.Prefix // guarded by forwardMu; excludes forwarding aliases
+	forwardAliases    map[netip.Addr]int
+	forwards          map[*PortForward]struct{}
+	closed            bool
 }
 
 type ICMPConn interface {
@@ -86,11 +88,12 @@ func NewSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, close
 		return nil, err
 	}
 	session := &Session{
-		stack:          s,
-		closeTransport: closeTransport,
-		terminalDone:   make(chan struct{}),
-		forwardAliases: make(map[netip.Addr]int),
-		forwards:       make(map[*PortForward]struct{}),
+		stack:             s,
+		assignedAddresses: s.Addresses(),
+		closeTransport:    closeTransport,
+		terminalDone:      make(chan struct{}),
+		forwardAliases:    make(map[netip.Addr]int),
+		forwards:          make(map[*PortForward]struct{}),
 	}
 	if done != nil {
 		go func() {
@@ -211,4 +214,33 @@ func (s *Session) Close() error {
 		s.closeErr = errors.Join(transportErr, stackErr)
 	})
 	return s.closeErr
+}
+
+// UpdateAddresses applies a protocol address assignment without replacing the
+// Session. Sockets bound to removed addresses may fail; unchanged addresses and
+// registered port-forward aliases are preserved. This changes no host networking.
+func (s *Session) UpdateAddresses(addresses []netip.Prefix) error {
+	s.forwardMu.Lock()
+	defer s.forwardMu.Unlock()
+	if s.closed {
+		return ErrSessionClosed
+	}
+	combined := append([]netip.Prefix(nil), addresses...)
+	for alias := range s.forwardAliases {
+		found := false
+		for _, p := range combined {
+			if p.Addr() == alias {
+				found = true
+				break
+			}
+		}
+		if !found {
+			combined = append(combined, netip.PrefixFrom(alias, alias.BitLen()))
+		}
+	}
+	if err := s.stack.ReplaceAddresses(combined); err != nil {
+		return err
+	}
+	s.assignedAddresses = append([]netip.Prefix(nil), addresses...)
+	return nil
 }

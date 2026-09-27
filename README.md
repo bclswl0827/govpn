@@ -2,7 +2,7 @@
 
 Pure-Go VPN clients and servers backed by a private gVisor network stack.
 
-- WireGuard, SSTP, OpenVPN, native SoftEther, OpenSSH TUN, and L2TP/IPsec
+- WireGuard, SSTP, OpenVPN, native SoftEther, OpenSSH TUN, L2TP/IPsec, and MASQUE CONNECT-IP (HTTP/1.1, HTTP/2, HTTP/3)
 - no CGO
 - no `/dev/tun` or TUN/TAP interface
 - no root privileges or host route changes
@@ -208,6 +208,62 @@ or multi-client SSH servers can accept connections themselves and call
 without a TUN channel. The complete server example includes PTY, resize,
 signal forwarding, SFTP, concurrent connections, and userspace tunnels.
 
+## MASQUE client and server
+
+MASQUE carries IP packets over TLS HTTP/1.1 Upgrade, HTTP/2 Extended CONNECT,
+or HTTP/3 CONNECT-IP. HTTP/3 uses QUIC datagrams with capsule fallback;
+HTTP/1.1 and HTTP/2 carry packets in capsules. Both sides use the same private
+gVisor stack and Session API as the other protocols.
+
+```go
+client := masque.NewClient(masque.Config{
+	Server:   "vpn.example.com",
+	Port:     443,
+	Version:  3,
+	Username: "alice",
+	Password: "secret",
+	CA:       caPEM,
+})
+session, err := client.Start(ctx)
+```
+
+The server assigns IPv4 and/or IPv6 addresses from its configured pools:
+
+```go
+server := masque.NewServer(masque.ServerConfig{
+	ListenIP:   "0.0.0.0",
+	ListenPort: 443,
+	Versions:   []int{1, 2, 3},
+	Cert:       certPEM,
+	Key:        keyPEM,
+	Users:      map[string]string{"alice": "secret"},
+	Pool:       "192.168.168.0/24",
+	IPv6Pool:   "fd00:168::/64",
+})
+session, err := server.Start(ctx)
+```
+
+`Config.Version` selects 1, 2, or 3; zero defaults to HTTP/3. Transport
+unavailability permits fallback to lower versions unless `DisableVersionFallback`
+is set; authentication and certificate failures do not. `ServerConfig.Versions`
+defaults to all three, sharing a port number across TCP and UDP. `Path` accepts
+URI templates and defaults to `/.well-known/masque/ip/{target}/{ipproto}/`.
+Certificates and CA are PEM bytes; `MTU` defaults to 1280.
+
+The server allocates distinct addresses to concurrent clients and releases them
+on disconnect. Both sides support route advertisements, destination/protocol
+scope, ICMP errors and client-subnet forwarding. Established clients reconnect
+with exponential backoff and apply new addresses to the existing Session.
+`Suspend`, `Resume`, `RestartSession`, `Ready` and `WaitReady` control lifecycle;
+use the Client socket methods for readiness-aware dialing. `ForwardPacket` and
+`WritePacket` integrate external userspace routers without installing host routes.
+
+Client extensions include custom TLS configuration, CONNECT URLs, headers,
+protocol identifiers, static addresses, and explicit HTTP/3 compatibility
+options. `TunnelDialer` can replace connection establishment while retaining
+the capsule processing and userspace stack. See the
+[MASQUE examples and configuration](examples/masque/README.md).
+
 ## Protocols
 
 | Package               | Implementation                                                                        |
@@ -218,6 +274,7 @@ signal forwarding, SFTP, concurrent connections, and userspace tunnels.
 | `protocols/softether` | Native SoftEther HTTPS/PACK login and Ethernet data channel                           |
 | `protocols/ssh`       | Pure-Go SSH TUN client/server, IPv4/IPv6, extensible channel/request dispatch         |
 | `protocols/l2tp`      | IKEv1 PSK, NAT-T, ESP transport mode, L2TPv2, PPP, MS-CHAPv2, IPCP/IPv4 client/server |
+| `protocols/masque`    | TLS HTTP/1.1 Upgrade, HTTP/2 and HTTP/3 CONNECT-IP, Basic auth, IPv4/IPv6, client extensions |
 
 The VPN protocol packages provide `NewClient` and `NewServer`. Complete
 programs are under `examples/`:
@@ -232,6 +289,8 @@ go run ./examples/ssh/client -h
 go run ./examples/ssh/server -h
 go run ./examples/l2tp/client -h
 go run ./examples/l2tp/server -h
+go run ./examples/masque/client -h
+go run ./examples/masque/server -h
 ```
 
 All client/server examples use `192.168.168.0/24`. Servers expose
@@ -253,6 +312,10 @@ VPN server. See [`examples/README.md`](examples/README.md).
   client/server path has no OS TUN dependency.
 - L2TP/IPsec supports IKEv1 Main Mode with PSK, NAT-T, AES-CBC, L2TPv2,
   MS-CHAPv2, and IPCP/IPv4. IPv6 and IKEv2 are not implemented.
+- MASQUE implements CONNECT-IP; CONNECT-UDP is a separate protocol and is not
+  implemented. Servers expose userspace sockets and explicit packet-forwarding
+  hooks without configuring host routing or NAT. Reconnection preserves the
+  Session, but does not guarantee survival of sockets bound to revoked addresses.
 
 Unsupported settings return an error instead of being ignored.
 

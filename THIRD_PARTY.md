@@ -16,3 +16,8 @@ source tree. No SoftEtherVPN C source is copied into this project.
 
 The L2TP/IPsec IKEv1, ESP, L2TP, PPP, and MS-CHAPv2 client core is adapted
 from `github.com/xen0bit/veepin`, copyright (c) 2026 Remy, under the MIT License.
+
+MASQUE HTTP/3 uses `github.com/quic-go/quic-go` and
+`github.com/quic-go/qpack`, licensed under the MIT License. HTTP/2 uses
+the public Framer and HPACK APIs from `golang.org/x/net/http2`, licensed
+under the BSD 3-Clause License.

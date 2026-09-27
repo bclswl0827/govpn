@@ -62,3 +62,23 @@ func (d *Device) WritePacket(ctx context.Context, packet []byte) error {
 		return ctx.Err()
 	}
 }
+
+// TryInject enqueues a packet without blocking. Shared multi-peer routers use
+// this to isolate slow peers; IP transports may drop packets under congestion.
+func (d *Device) TryInject(packet []byte) bool {
+	if d.closedFlag.Load() {
+		return false
+	}
+	owned := append([]byte(nil), packet...)
+	select {
+	case <-d.closed:
+		return false
+	default:
+	}
+	select {
+	case d.toProtocol <- owned:
+		return true
+	default:
+		return false
+	}
+}

@@ -5,7 +5,7 @@ behavior:
 
 - `192.168.168.0/24` is the VPN network;
 - `192.168.168.1` is the server address;
-- the server exposes `http://192.168.168.1/` and returns `It works!`;
+- the server exposes `http://192.168.168.1/` and returns `VPN works!`;
 - the client listens for SOCKS5 on `127.0.0.1:1080` by default;
 - public SOCKS5 destinations leave through the VPN server's host network.
 
@@ -26,6 +26,24 @@ concepts: `-username`, `-password`, `-cert`, `-key`, and
 `-insecure-skip-verify`. Protocol-specific credentials such as WireGuard keys,
 an IPsec PSK, and an SSH host key retain explicit names.
 
-OpenVPN, SSTP, SoftEther, and L2TP obtain `192.168.168.2` from their server-side
-configuration protocols. WireGuard and SSH TUN have no address-assignment
-exchange, so their examples configure `192.168.168.2/24` statically.
+OpenVPN, SSTP, SoftEther, L2TP, and MASQUE obtain `192.168.168.2` from their
+server-side configuration protocols. WireGuard and SSH TUN have no
+address-assignment exchange, so their examples configure `192.168.168.2/24`
+statically.
+
+## Protocol examples
+
+Run each command with `-h` to view its configuration flags:
+
+| Protocol | Client | Server |
+| --- | --- | --- |
+| WireGuard | `go run ./examples/wireguard/client -h` | `go run ./examples/wireguard/server -h` |
+| SSTP | `go run ./examples/sstp/client -h` | `go run ./examples/sstp/server -h` |
+| OpenVPN | `go run ./examples/openvpn/client -h` | `go run ./examples/openvpn/server -h` |
+| SoftEther | `go run ./examples/softether/client -h` | `go run ./examples/softether/server -h` |
+| SSH TUN | `go run ./examples/ssh/client -h` | `go run ./examples/ssh/server -h` |
+| L2TP/IPsec | `go run ./examples/l2tp/client -h` | `go run ./examples/l2tp/server -h` |
+| MASQUE | `go run ./examples/masque/client -h` | `go run ./examples/masque/server -h` |
+
+See [masque/README.md](masque/README.md) for certificate setup, HTTP version
+selection, and extended client configuration.

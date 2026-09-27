@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bclswl0827/govpn"
+	"github.com/bclswl0827/govpn/protocols/masque"
 	"github.com/bclswl0827/govpn/protocols/openvpn"
 	"github.com/bclswl0827/govpn/protocols/softether"
 	"github.com/bclswl0827/govpn/protocols/sstp"
@@ -30,6 +31,15 @@ func TestProtocolRoundTrip(t *testing.T) {
 	}{
 		{name: "wireguard", address: "10.10.0.1:8080", start: startWireGuard},
 		{name: "sstp", address: "10.20.0.1:8080", start: startSSTP},
+		{name: "masque-http1", address: "10.50.0.1:8080", start: func(ctx context.Context, t *testing.T) (*govpn.Session, *govpn.Session) {
+			return startMASQUE(ctx, t, 1)
+		}},
+		{name: "masque-http2", address: "10.50.0.1:8080", start: func(ctx context.Context, t *testing.T) (*govpn.Session, *govpn.Session) {
+			return startMASQUE(ctx, t, 2)
+		}},
+		{name: "masque-http3", address: "10.50.0.1:8080", start: func(ctx context.Context, t *testing.T) (*govpn.Session, *govpn.Session) {
+			return startMASQUE(ctx, t, 3)
+		}},
 		{name: "openvpn", address: "10.30.0.1:8080", start: startOpenVPN},
 		{name: "softether", address: "10.40.0.1:8080", start: startSoftEther},
 	}
@@ -354,4 +364,51 @@ func signedLeaf(t *testing.T, ca *certificateAuthority, server bool) ([]byte, []
 		t.Fatal(err)
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+}
+
+func startMASQUE(ctx context.Context, t *testing.T, version int) (*govpn.Session, *govpn.Session) {
+	t.Helper()
+	network := "tcp"
+	if version == 3 {
+		network = "udp"
+	}
+	port := freePort(t, network)
+	ca, cert, key := testPKI(t)
+	server, err := masque.NewServer(masque.ServerConfig{
+		Versions: []int{version}, Cert: cert, Key: key, ListenIP: "127.0.0.1", ListenPort: port,
+		Pool: "10.50.0.0/24", IPv6Pool: "fd00:50::/64",
+		Users: map[string]string{"alice": "correct horse battery staple"},
+	}).Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+	// The shared test PKI has no DNS/IP SAN, so verification is explicitly
+	// disabled here; the example uses a verified local CA and a SAN certificate.
+	config := masque.Config{
+		Server: "127.0.0.1", Port: port, Username: "alice", Password: "wrong",
+		Version: version, CA: ca.certPEM, SkipVerify: true,
+	}
+	if unexpected, err := masque.NewClient(config).Start(ctx); err == nil {
+		_ = unexpected.Close()
+		t.Fatal("invalid credentials were accepted")
+	}
+	config.Password = "correct horse battery staple"
+	client, err := masque.NewClient(config).Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	if addresses := client.Addresses(); len(addresses) != 2 || addresses[0].String() != "10.50.0.2/32" || addresses[1].String() != "fd00:50::2/128" {
+		t.Fatalf("assigned addresses: %v", addresses)
+	}
+	second, err := masque.NewClient(config).Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	if second.Addresses()[0] == client.Addresses()[0] {
+		t.Fatal("concurrent clients received the same address")
+	}
+	return server, client
 }

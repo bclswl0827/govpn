@@ -187,3 +187,84 @@ func (s *Stack) Close() error {
 	})
 	return s.closeErr
 }
+
+// ReplaceAddresses updates the NIC without replacing the stack or its sockets.
+// It is used by protocols whose peer can change address assignments at runtime.
+func (s *Stack) ReplaceAddresses(addresses []netip.Prefix) error {
+	clean := make([]netip.Prefix, 0, len(addresses))
+	seen := make(map[netip.Addr]bool)
+	for _, p := range addresses {
+		if !p.IsValid() || p.Addr().Zone() != "" || p.Addr().Is4In6() || seen[p.Addr()] {
+			return errors.New("govpn: invalid or duplicate userspace address")
+		}
+		seen[p.Addr()] = true
+		clean = append(clean, p)
+	}
+	s.addressMu.Lock()
+	defer s.addressMu.Unlock()
+	if s.closed {
+		return net.ErrClosed
+	}
+	old := append([]netip.Prefix(nil), s.addresses...)
+	set := func(next []netip.Prefix) error {
+		// Leave unchanged addresses installed so existing sockets remain usable.
+		for _, p := range s.addresses {
+			keep := false
+			for _, n := range next {
+				if n == p {
+					keep = true
+					break
+				}
+			}
+			if !keep {
+				_, a := protocolAddress(p.Addr(), p.Bits())
+				if err := s.stack.RemoveAddress(nicID, a.Address); err != nil {
+					return fmt.Errorf("govpn: remove address: %s", err)
+				}
+			}
+		}
+		for _, p := range next {
+			exists := false
+			for _, o := range s.addresses {
+				if o == p {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				protocol, a := protocolAddress(p.Addr(), p.Bits())
+				if err := s.stack.AddProtocolAddress(nicID, tcpip.ProtocolAddress{Protocol: protocol, AddressWithPrefix: a}, stack.AddressProperties{}); err != nil {
+					return fmt.Errorf("govpn: add address: %s", err)
+				}
+			}
+		}
+		return nil
+	}
+	if err := set(clean); err != nil {
+		// Restore the old NIC configuration after a partial update.
+		for _, p := range append(append([]netip.Prefix(nil), old...), clean...) {
+			_, a := protocolAddress(p.Addr(), p.Bits())
+			_ = s.stack.RemoveAddress(nicID, a.Address)
+		}
+		for _, p := range old {
+			protocol, a := protocolAddress(p.Addr(), p.Bits())
+			_ = s.stack.AddProtocolAddress(nicID, tcpip.ProtocolAddress{Protocol: protocol, AddressWithPrefix: a}, stack.AddressProperties{})
+		}
+		return err
+	}
+	s.addresses = clean
+	var routes []tcpip.Route
+	has4, has6 := false, false
+	for _, p := range clean {
+		has4 = has4 || p.Addr().Is4()
+		has6 = has6 || p.Addr().Is6()
+	}
+	if has4 {
+		routes = append(routes, tcpip.Route{Destination: header.IPv4EmptySubnet, NIC: nicID})
+	}
+	if has6 {
+		routes = append(routes, tcpip.Route{Destination: header.IPv6EmptySubnet, NIC: nicID})
+	}
+	s.stack.SetRouteTable(routes)
+	return nil
+}
