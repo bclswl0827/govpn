@@ -2,7 +2,7 @@
 
 Pure-Go VPN clients and servers backed by a private gVisor network stack.
 
-- WireGuard, SSTP, OpenVPN, native SoftEther, OpenSSH TUN, L2TP/IPsec, and MASQUE CONNECT-IP (HTTP/1.1, HTTP/2, HTTP/3)
+- WireGuard, SSTP, OpenVPN, native SoftEther, OpenSSH TUN, L2TP/IPsec, IKEv2/IPsec, and MASQUE CONNECT-IP (HTTP/1.1, HTTP/2, HTTP/3)
 - no CGO
 - no `/dev/tun` or TUN/TAP interface
 - no root privileges or host route changes
@@ -208,6 +208,40 @@ or multi-client SSH servers can accept connections themselves and call
 without a TUN channel. The complete server example includes PTY, resize,
 signal forwarding, SFTP, concurrent connections, and userspace tunnels.
 
+## IKEv2/IPsec client and server
+
+IKEv2 uses PSK or EAP-MSCHAPv2 password authentication, assigns an IPv4 virtual
+address with a Configuration Payload, and carries IPv4 packets in an ESP tunnel
+over NAT-T. EAP mode authenticates the responder with an RSA certificate. Both
+roles keep all IPsec state in the process:
+
+```go
+server, err := ikev2.NewServer(ikev2.ServerConfig{
+	ListenIP: "0.0.0.0",
+	PublicIP: "203.0.113.10",
+	Identity: "vpn.example",
+	Users:    map[string]string{"alice": "a-long-random-secret"},
+	Pool:     "192.168.168.0/24",
+})
+
+client := ikev2.NewClient(ikev2.Config{
+	Server:   "vpn.example",
+	LocalID:  "alice",
+	RemoteID: "vpn.example",
+	PSK:      "a-long-random-secret",
+})
+session, err := client.Start(ctx)
+```
+
+The default interoperable proposal is AES-256-CBC, PRF-HMAC-SHA2-256,
+HMAC-SHA2-256-128, and MODP-2048 for IKE; an explicit compatibility option
+enables legacy MODP-1024. ESP uses AES-256-CBC and HMAC-SHA2-256-128. UDP
+encapsulation is forced unless explicitly disabled so
+the implementation does not require a raw ESP socket. The wire behavior follows
+RFC 7296, RFC 3948, and RFC 4303; the suite follows the mandatory-to-implement
+guidance in RFC 8247 and RFC 8221. See the
+[IKEv2 example](examples/ikev2/README.md).
+
 ## MASQUE client and server
 
 MASQUE carries IP packets over TLS HTTP/1.1 Upgrade, HTTP/2 Extended CONNECT,
@@ -274,6 +308,7 @@ the capsule processing and userspace stack. See the
 | `protocols/softether` | Native SoftEther HTTPS/PACK login and Ethernet data channel                           |
 | `protocols/ssh`       | Pure-Go SSH TUN client/server, IPv4/IPv6, extensible channel/request dispatch         |
 | `protocols/l2tp`      | IKEv1 PSK, NAT-T, ESP transport mode, L2TPv2, PPP, MS-CHAPv2, IPCP/IPv4 client/server |
+| `protocols/ikev2`     | IKEv2 PSK/EAP-MSCHAPv2, responder certificates, NAT-T, IPv4, ESP tunnel, client/server |
 | `protocols/masque`    | TLS HTTP/1.1 Upgrade, HTTP/2 and HTTP/3 CONNECT-IP, Basic auth, IPv4/IPv6, client extensions |
 
 The VPN protocol packages provide `NewClient` and `NewServer`. Complete
@@ -289,6 +324,8 @@ go run ./examples/ssh/client -h
 go run ./examples/ssh/server -h
 go run ./examples/l2tp/client -h
 go run ./examples/l2tp/server -h
+go run ./examples/ikev2/client -h
+go run ./examples/ikev2/server -h
 go run ./examples/masque/client -h
 go run ./examples/masque/server -h
 ```
@@ -311,7 +348,11 @@ VPN server. See [`examples/README.md`](examples/README.md).
   currently targets Linux `IFF_TUN | IFF_NO_PI` framing. The pure-Go govpn
   client/server path has no OS TUN dependency.
 - L2TP/IPsec supports IKEv1 Main Mode with PSK, NAT-T, AES-CBC, L2TPv2,
-  MS-CHAPv2, and IPCP/IPv4. IPv6 and IKEv2 are not implemented.
+  MS-CHAPv2, and IPCP/IPv4. IPv6 is not implemented.
+- IKEv2/IPsec supports IPv4 tunnel mode, PSK, and EAP-MSCHAPv2 with RSA
+  responder certificates. Generic client certificate authentication, other EAP
+  methods, IPv6, IKE fragmentation, MOBIKE, and Child SA rekeying are not
+  implemented; peers can replace an expired SA with a new connection.
 - MASQUE implements CONNECT-IP; CONNECT-UDP is a separate protocol and is not
   implemented. Servers expose userspace sockets and explicit packet-forwarding
   hooks without configuring host routing or NAT. Reconnection preserves the

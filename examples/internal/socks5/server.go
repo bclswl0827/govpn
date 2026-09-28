@@ -24,15 +24,16 @@ func Serve(ctx context.Context, listener net.Listener, dialer Dialer, logger *lo
 			}
 			return fmt.Errorf("accept SOCKS5 connection: %w", err)
 		}
-		logf(logger, "accepted client: remote=%s", conn.RemoteAddr())
-		go func() {
+		remote := fmt.Sprint(conn.RemoteAddr())
+		logf(logger, "accepted client: remote=%s", remote)
+		go func(conn net.Conn, remote string) {
 			defer conn.Close()
 			if err := handle(ctx, conn, dialer, logger); err != nil {
-				logf(logger, "client ended with error: remote=%s error=%v", conn.RemoteAddr(), err)
+				logf(logger, "client ended with error: remote=%s error=%v", remote, err)
 			} else {
-				logf(logger, "client closed: remote=%s", conn.RemoteAddr())
+				logf(logger, "client closed: remote=%s", remote)
 			}
-		}()
+		}(conn, remote)
 	}
 }
 

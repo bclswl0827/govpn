@@ -20,6 +20,7 @@ const (
 	ProtocolSoftEther Protocol = "softether"
 	ProtocolSSH       Protocol = "ssh"
 	ProtocolL2TP      Protocol = "l2tp"
+	ProtocolIKEv2     Protocol = "ikev2"
 	ProtocolMASQUE    Protocol = "masque"
 )
 

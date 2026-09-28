@@ -26,7 +26,7 @@ concepts: `-username`, `-password`, `-cert`, `-key`, and
 `-insecure-skip-verify`. Protocol-specific credentials such as WireGuard keys,
 an IPsec PSK, and an SSH host key retain explicit names.
 
-OpenVPN, SSTP, SoftEther, L2TP, and MASQUE obtain `192.168.168.2` from their
+OpenVPN, SSTP, SoftEther, L2TP, IKEv2, and MASQUE obtain `192.168.168.2` from their
 server-side configuration protocols. WireGuard and SSH TUN have no
 address-assignment exchange, so their examples configure `192.168.168.2/24`
 statically.
@@ -43,7 +43,9 @@ Run each command with `-h` to view its configuration flags:
 | SoftEther | `go run ./examples/softether/client -h` | `go run ./examples/softether/server -h` |
 | SSH TUN | `go run ./examples/ssh/client -h` | `go run ./examples/ssh/server -h` |
 | L2TP/IPsec | `go run ./examples/l2tp/client -h` | `go run ./examples/l2tp/server -h` |
+| IKEv2/IPsec | `go run ./examples/ikev2/client -h` | `go run ./examples/ikev2/server -h` |
 | MASQUE | `go run ./examples/masque/client -h` | `go run ./examples/masque/server -h` |
 
-See [masque/README.md](masque/README.md) for certificate setup, HTTP version
-selection, and extended client configuration.
+See [ikev2/README.md](ikev2/README.md) for the IKE/ESP proposal and external
+peer requirements. See [masque/README.md](masque/README.md) for certificate
+setup, HTTP version selection, and extended client configuration.
