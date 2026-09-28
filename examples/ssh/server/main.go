@@ -40,6 +40,8 @@ func main() {
 		Timeout:           15 * time.Second,
 		KeepaliveInterval: 30 * time.Second,
 		Logger:            logger,
+		TrafficPolicy:     exampleutil.ExampleTrafficPolicy(),
+		OnTrafficDecision: exampleutil.LogTrafficDecision,
 	})
 	exampleutil.Must(registerSessionHandlers(server, *shell, logger))
 	exampleutil.Must(server.RegisterSessionRequestHandler("subsystem", sftpHandler(logger)))

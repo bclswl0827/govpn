@@ -3,6 +3,8 @@ package openvpn
 import (
 	"log"
 	"net"
+
+	"github.com/bclswl0827/govpn"
 )
 
 const defaultMTU = 1500
@@ -69,4 +71,6 @@ type ServerConfig struct {
 	KeyDirectionSet    bool
 	Shape              int
 	Logger             *log.Logger
+	TrafficPolicy      govpn.TrafficPolicy
+	OnTrafficDecision  govpn.TrafficPolicyCallback
 }

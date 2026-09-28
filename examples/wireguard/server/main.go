@@ -16,10 +16,12 @@ func main() {
 
 	ctx := exampleutil.Context()
 	session, err := wireguard.NewServer(wireguard.ServerConfig{
-		PrivateKey: *privateKey,
-		ListenIP:   *listen,
-		ListenPort: *port,
-		Address:    exampleutil.ServerPrefix,
+		PrivateKey:        *privateKey,
+		ListenIP:          *listen,
+		ListenPort:        *port,
+		Address:           exampleutil.ServerPrefix,
+		TrafficPolicy:     exampleutil.ExampleTrafficPolicy(),
+		OnTrafficDecision: exampleutil.LogTrafficDecision,
 		Peers: []wireguard.ServerPeer{{
 			PublicKey:  *peerPublicKey,
 			AllowedIPs: []string{"192.168.168.2/32"},

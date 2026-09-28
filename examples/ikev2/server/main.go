@@ -49,6 +49,8 @@ func main() {
 		PrivateKey:          privateKey,
 		AllowLegacyMODP1024: *allowLegacyMODP1024,
 		Pool:                exampleutil.InternalCIDR,
+		TrafficPolicy:       exampleutil.ExampleTrafficPolicy(),
+		OnTrafficDecision:   exampleutil.LogTrafficDecision,
 	})
 	exampleutil.Must(err)
 	ctx := exampleutil.Context()

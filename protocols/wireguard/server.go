@@ -53,7 +53,10 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	session, runtime, err := start(addresses, mtu, uapi, peers, s.Config.Logger)
+	serverOptions := govpn.ServerSessionOptions{
+		Protocol: govpn.ProtocolWireGuard, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision,
+	}
+	session, runtime, err := start(addresses, mtu, uapi, peers, s.Config.Logger, &serverOptions)
 	if err != nil {
 		return nil, err
 	}

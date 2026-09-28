@@ -15,6 +15,15 @@ type Dialer interface {
 	DialContext(context.Context, string, string) (net.Conn, error)
 }
 
+// RequestDialer receives the VPN client's address as well as the requested
+// upstream. It allows a server-side traffic policy to authorize proxy egress.
+type RequestDialer interface {
+	DialRequestContext(context.Context, string, string, net.Addr) (net.Conn, error)
+}
+
+// ErrConnectionNotAllowed maps to the SOCKS5 policy-denied reply.
+var ErrConnectionNotAllowed = errors.New("SOCKS5 connection not allowed by policy")
+
 func Serve(ctx context.Context, listener net.Listener, dialer Dialer, logger *log.Logger) error {
 	for {
 		conn, err := listener.Accept()
@@ -55,9 +64,18 @@ func handle(ctx context.Context, client net.Conn, dialer Dialer, logger *log.Log
 	logf(logger, "connecting: remote=%s network=%s target=%s", client.RemoteAddr(), network, address)
 	dialContext, cancelDial := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelDial()
-	upstream, err := dialer.DialContext(dialContext, network, address)
+	var upstream net.Conn
+	if requestDialer, ok := dialer.(RequestDialer); ok {
+		upstream, err = requestDialer.DialRequestContext(dialContext, network, address, client.RemoteAddr())
+	} else {
+		upstream, err = dialer.DialContext(dialContext, network, address)
+	}
 	if err != nil {
-		_ = writeReply(client, generalError, nil)
+		status := byte(generalError)
+		if errors.Is(err, ErrConnectionNotAllowed) {
+			status = notAllowed
+		}
+		_ = writeReply(client, status, nil)
 		return fmt.Errorf("SOCKS5 connect: %w", err)
 	}
 	defer upstream.Close()

@@ -152,7 +152,10 @@ func (s *Server) serve(ctx context.Context, listener net.Listener, timeout time.
 	)
 	done := make(chan error, 1)
 	go transport.run(done)
-	session, err := govpn.NewSession(accepted.addresses, uint32(accepted.mtu), accepted.device, transport.Close, done)
+	session, err := govpn.NewServerSession(
+		accepted.addresses, uint32(accepted.mtu), accepted.device, transport.Close, done,
+		govpn.ServerSessionOptions{Protocol: govpn.ProtocolSSH, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision},
+	)
 	if err != nil {
 		_ = transport.Close()
 		return nil, err
@@ -233,7 +236,10 @@ func (s *Server) HandleConn(ctx context.Context, rawConnection net.Conn, onTunne
 			)
 			done := make(chan error, 1)
 			go transport.run(done)
-			tunnelSession, err = govpn.NewSession(accepted.addresses, uint32(accepted.mtu), accepted.device, transport.Close, done)
+			tunnelSession, err = govpn.NewServerSession(
+				accepted.addresses, uint32(accepted.mtu), accepted.device, transport.Close, done,
+				govpn.ServerSessionOptions{Protocol: govpn.ProtocolSSH, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision},
+			)
 			if err != nil {
 				_ = transport.Close()
 				return err

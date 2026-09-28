@@ -239,7 +239,7 @@ func (f *PortForward) acceptLoop() {
 func (f *PortForward) proxy(client net.Conn) {
 	defer f.untrack(client)
 	defer client.Close()
-	target, err := (&net.Dialer{}).DialContext(f.ctx, f.network, f.target)
+	target, err := f.session.DialEgressContext(f.ctx, f.network, f.target, client.RemoteAddr())
 	if err != nil {
 		return
 	}

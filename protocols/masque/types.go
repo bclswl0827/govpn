@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/bclswl0827/govpn"
 	"github.com/quic-go/quic-go"
 )
 
@@ -151,11 +152,13 @@ type ServerConfig struct {
 	Address []netip.Prefix
 	// AdvertiseRoutes permits these destinations plus the tunnel pools.
 	// Empty allows all destinations of allocated address families.
-	AdvertiseRoutes []netip.Prefix
-	Resolve         func(context.Context, string) ([]netip.Addr, error)
-	ForwardPacket   func(context.Context, []byte) error
-	TLSConfig       *tls.Config
-	HTTP3           HTTP3Options
+	AdvertiseRoutes   []netip.Prefix
+	Resolve           func(context.Context, string) ([]netip.Addr, error)
+	ForwardPacket     func(context.Context, []byte) error
+	TLSConfig         *tls.Config
+	HTTP3             HTTP3Options
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 }
 
 // Configuration is a detached snapshot of the active client configuration.

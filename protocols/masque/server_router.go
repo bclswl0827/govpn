@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 
+	"github.com/bclswl0827/govpn"
 	"github.com/bclswl0827/govpn/internal/packet"
 )
 
@@ -108,6 +109,13 @@ func (s *serverTransport) inbound(ctx context.Context, origin *serverPeer, p []b
 	}
 	if destination.IsLinkLocalUnicast() || destination.IsMulticast() {
 		return nil
+	}
+	decision := govpn.EvaluateTrafficPacket(
+		s.trafficPolicy, s.onTrafficDecision, govpn.ProtocolMASQUE,
+		govpn.TrafficDirectionClientIngress, p,
+	)
+	if !decision.Allowed() {
+		return s.reply(ctx, p, sourcePolicy, origin, 0)
 	}
 	if !containsRoute(origin.allowed, destination, protocol) {
 		return s.reply(ctx, p, noRoute, origin, 0)

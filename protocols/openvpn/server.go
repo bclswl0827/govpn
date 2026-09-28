@@ -84,7 +84,9 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 	if network6.IsValid() {
 		addresses = append(addresses, netip.PrefixFrom(gateway6, network6.Bits()))
 	}
-	return govpn.NewSession(addresses, uint32(mtu), device, closeTransport, done)
+	return govpn.NewServerSession(addresses, uint32(mtu), device, closeTransport, done, govpn.ServerSessionOptions{
+		Protocol: govpn.ProtocolOpenVPN, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision,
+	})
 }
 
 func serverTransportNetwork(config ServerConfig) string {

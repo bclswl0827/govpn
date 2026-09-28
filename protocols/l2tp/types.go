@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"time"
+
+	"github.com/bclswl0827/govpn"
 )
 
 const (
@@ -39,13 +41,15 @@ type ServerConfig struct {
 	ListenIP string
 	// PublicIP is the outer address clients use. It defaults to ListenIP when
 	// ListenIP is concrete and is required for a wildcard listener.
-	PublicIP string
-	IKEPort  int
-	NATTPort int
-	PSK      string
-	Users    map[string]string
-	Pool     string
-	DNS      []net.IP
-	MTU      int
-	Logger   *log.Logger
+	PublicIP          string
+	IKEPort           int
+	NATTPort          int
+	PSK               string
+	Users             map[string]string
+	Pool              string
+	DNS               []net.IP
+	MTU               int
+	Logger            *log.Logger
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 }

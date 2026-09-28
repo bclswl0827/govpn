@@ -25,6 +25,7 @@ func main() {
 	ctx := exampleutil.Context()
 	session, err := openvpn.NewServer(openvpn.ServerConfig{
 		CA: ca, Cert: cert, Key: key, ListenIP: *listen, ListenPort: *port, Pool: exampleutil.InternalCIDR,
+		TrafficPolicy: exampleutil.ExampleTrafficPolicy(), OnTrafficDecision: exampleutil.LogTrafficDecision,
 	}).Start(ctx)
 	exampleutil.Must(err)
 	defer session.Close()

@@ -41,6 +41,64 @@ packetConn, err := session.ListenPacket("udp", "10.0.0.2:5353")
 These sockets are not visible on the host. Use an explicit proxy when a host
 application needs access to a session socket.
 
+## Server traffic policy
+
+Every protocol server accepts the same `TrafficPolicy` and
+`OnTrafficDecision` fields. An ordered rule policy with a default allow action
+is a blacklist; default deny produces a whitelist. Rules can match traffic
+direction, source and destination CIDRs, destination hostnames, IP protocols,
+and source or destination port ranges:
+
+```go
+policy, err := govpn.NewRuleTrafficPolicy(govpn.TrafficActionAllow, []govpn.TrafficRule{{
+	Name:             "block-example.com",
+	Action:           govpn.TrafficActionDeny,
+	Directions:       []govpn.TrafficDirection{govpn.TrafficDirectionServerEgress},
+	DestinationHosts: []string{"example.com", "*.example.com"},
+}})
+if err != nil {
+	return err
+}
+
+server := wireguard.NewServer(wireguard.ServerConfig{
+	// WireGuard keys, addresses, and peers omitted.
+	TrafficPolicy: policy,
+	OnTrafficDecision: func(event govpn.TrafficPolicyEvent) {
+		if !event.Decision.Allowed() {
+			log.Printf("VPN traffic denied: protocol=%s direction=%s source=%s destination=%s host=%q rule=%q",
+				event.Flow.VPNProtocol, event.Flow.Direction, event.Flow.SourceIP,
+				event.Flow.DestinationIP, event.Flow.DestinationHost, event.Decision.Rule)
+		}
+	},
+})
+```
+
+Client IP packets are checked after protocol authentication/decryption and
+before entering the server's userspace network stack. MASQUE also checks its
+direct peer and forwarding paths. `Session.DialEgressContext` evaluates the
+resolved target before making a host-network connection; the built-in port
+forwarder and example SOCKS5 server use this method, so proxy traffic cannot
+bypass the policy.
+
+Hostname selectors apply only to application egress that supplies the original
+hostname. A client can instead request an IP literal, so security boundaries
+should use destination CIDR rules or a default-deny CIDR allowlist. The callback
+runs synchronously and may be concurrent; it should return promptly.
+
+### IP address matching
+
+`SourcePrefixes` and `DestinationPrefixes` accept CIDR notation for both IPv4
+and IPv6 (e.g., `10.0.0.0/8`, `192.168.1.1/32`, `2001:db8::/32` or
+`2001:db8::1/128`) because `netip.Prefix` supports both address families
+transparently.
+
+To block a host by IP address — regardless of whether it is IPv4 or IPv6 —
+always use `DestinationPrefixes` with its CIDR notation. Do **not** put IP
+address literals in `DestinationHosts`: the host matching is string-based and
+canonical representations vary (e.g., `::1` vs `0:0:0:0:0:0:0:1` for IPv6, or
+trailing dot differences for IPv4), making matches unreliable.
+`DestinationHosts` is for hostname matching only.
+
 ICMP is available through the same userspace stack. The connection carries
 ICMP messages, not host raw sockets:
 

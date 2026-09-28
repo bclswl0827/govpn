@@ -68,5 +68,8 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 		return nil, ctx.Err()
 	default:
 	}
-	return govpn.NewSession([]netip.Prefix{netip.PrefixFrom(gateway, network.Bits())}, uint32(mtu), device, transport.Close, done)
+	return govpn.NewServerSession(
+		[]netip.Prefix{netip.PrefixFrom(gateway, network.Bits())}, uint32(mtu), device, transport.Close, done,
+		govpn.ServerSessionOptions{Protocol: govpn.ProtocolSoftEther, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision},
+	)
 }

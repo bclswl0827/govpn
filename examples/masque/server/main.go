@@ -50,6 +50,7 @@ func main() {
 	session, err := masque.NewServer(masque.ServerConfig{
 		Versions: versions, Cert: cert, Key: key, ListenIP: *listen, ListenPort: *port,
 		Path: *path, Pool: *pool, IPv6Pool: *ipv6Pool, AdvertiseRoutes: routes, Users: map[string]string{*username: *password},
+		TrafficPolicy: exampleutil.ExampleTrafficPolicy(), OnTrafficDecision: exampleutil.LogTrafficDecision,
 	}).Start(ctx)
 	exampleutil.Must(err)
 	defer session.Close()

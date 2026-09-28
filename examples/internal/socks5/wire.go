@@ -15,6 +15,7 @@ const (
 	connectCommand = 1
 	succeeded      = 0
 	generalError   = 1
+	notAllowed     = 2
 	commandError   = 7
 	addressError   = 8
 	addressIPv4    = 1

@@ -3,6 +3,8 @@ package sstp
 import (
 	"log"
 	"net"
+
+	"github.com/bclswl0827/govpn"
 )
 
 const defaultMTU = 1500
@@ -29,6 +31,8 @@ type ServerConfig struct {
 	Users      map[string]string
 	// Shape is retained for source compatibility and rejected when non-zero;
 	// traffic shaping is not part of SSTP.
-	Shape  int
-	Logger *log.Logger
+	Shape             int
+	Logger            *log.Logger
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 }

@@ -132,4 +132,6 @@ type ServerConfig struct {
 	KeepaliveInterval           time.Duration
 	ServerVersion               string
 	Logger                      *log.Logger
+	TrafficPolicy               govpn.TrafficPolicy
+	OnTrafficDecision           govpn.TrafficPolicyCallback
 }

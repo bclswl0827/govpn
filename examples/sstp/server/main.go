@@ -25,6 +25,7 @@ func main() {
 	session, err := sstp.NewServer(sstp.ServerConfig{
 		Cert: cert, Key: key, ListenIP: *listen, ListenPort: *port,
 		Pool: exampleutil.InternalCIDR, Users: map[string]string{*username: *password},
+		TrafficPolicy: exampleutil.ExampleTrafficPolicy(), OnTrafficDecision: exampleutil.LogTrafficDecision,
 	}).Start(ctx)
 	exampleutil.Must(err)
 	defer session.Close()

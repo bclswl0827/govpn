@@ -26,6 +26,7 @@ func main() {
 	session, err := softether.NewServer(softether.ServerConfig{
 		Cert: cert, Key: key, ListenIP: *listen, ListenPort: *port,
 		Hub: *hub, Pool: exampleutil.InternalCIDR, Users: map[string]string{*username: *password},
+		TrafficPolicy: exampleutil.ExampleTrafficPolicy(), OnTrafficDecision: exampleutil.LogTrafficDecision,
 	}).Start(ctx)
 	exampleutil.Must(err)
 	defer session.Close()

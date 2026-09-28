@@ -34,18 +34,20 @@ func NewServer(config ServerConfig) *Server { return &Server{Config: config} }
 var _ govpn.Server = (*Server)(nil)
 
 type serverTransport struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	closers       []io.Closer
-	device        *packet.Device
-	mu            sync.Mutex
-	peers         map[*serverPeer]struct{}
-	pools         []*addressPool
-	local         []netip.Prefix
-	forwardPacket func(context.Context, []byte) error
-	sequence      uint64
-	closed        bool
-	once          sync.Once
+	ctx               context.Context
+	cancel            context.CancelFunc
+	closers           []io.Closer
+	device            *packet.Device
+	mu                sync.Mutex
+	peers             map[*serverPeer]struct{}
+	pools             []*addressPool
+	local             []netip.Prefix
+	forwardPacket     func(context.Context, []byte) error
+	trafficPolicy     govpn.TrafficPolicy
+	onTrafficDecision govpn.TrafficPolicyCallback
+	sequence          uint64
+	closed            bool
+	once              sync.Once
 }
 
 func (s *serverTransport) Close() error {
@@ -177,7 +179,11 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 		return nil, err
 	}
 	transportCtx, cancel := context.WithCancel(ctx)
-	t := &serverTransport{ctx: transportCtx, cancel: cancel, device: device, peers: make(map[*serverPeer]struct{}), pools: pools, local: local, forwardPacket: s.Config.ForwardPacket}
+	t := &serverTransport{
+		ctx: transportCtx, cancel: cancel, device: device, peers: make(map[*serverPeer]struct{}), pools: pools,
+		local: local, forwardPacket: s.Config.ForwardPacket,
+		trafficPolicy: s.Config.TrafficPolicy, onTrafficDecision: s.Config.OnTrafficDecision,
+	}
 	success := false
 	defer func() {
 		if !success {
@@ -361,7 +367,10 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 		serve = append(serve, func() error { return httpServer.ServeListener(listener) })
 	}
 	done := make(chan error, 1)
-	session, err := govpn.NewSession(local, uint32(mtu), device, t.Close, done)
+	session, err := govpn.NewServerSession(local, uint32(mtu), device, t.Close, done, govpn.ServerSessionOptions{
+		Protocol: govpn.ProtocolMASQUE, TrafficPolicy: s.Config.TrafficPolicy,
+		OnTrafficDecision: s.Config.OnTrafficDecision, SkipPacketFilter: true,
+	})
 	if err != nil {
 		return nil, err
 	}

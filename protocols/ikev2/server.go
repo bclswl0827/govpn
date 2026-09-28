@@ -53,9 +53,10 @@ func (server *Server) Start(ctx context.Context) (*govpn.Session, error) {
 		cancelRun()
 		return transport.close()
 	}
-	session, err := govpn.NewSession(
+	session, err := govpn.NewServerSession(
 		[]netip.Prefix{netip.PrefixFrom(settings.gateway, settings.network.Bits())},
 		uint32(settings.mtu), device, closeTransport, done,
+		govpn.ServerSessionOptions{Protocol: govpn.ProtocolIKEv2, TrafficPolicy: server.Config.TrafficPolicy, OnTrafficDecision: server.Config.OnTrafficDecision},
 	)
 	if err != nil {
 		cancelRun()

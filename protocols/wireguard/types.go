@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/bclswl0827/govpn"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -71,14 +72,16 @@ type ServerConfig struct {
 	ListenPort int
 	// ListenIP is retained for configuration compatibility. wireguard-go binds
 	// both wildcard families; a specific bind address is not supported.
-	ListenIP     string
-	Address      string
-	Address6     string
-	Addresses    []string
-	MTU          int
-	FirewallMark uint32
-	Peers        []ServerPeer
-	Logger       *log.Logger
+	ListenIP          string
+	Address           string
+	Address6          string
+	Addresses         []string
+	MTU               int
+	FirewallMark      uint32
+	Peers             []ServerPeer
+	Logger            *log.Logger
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 }
 
 func GenerateKeypair() (privateKey, publicKey string, err error) {

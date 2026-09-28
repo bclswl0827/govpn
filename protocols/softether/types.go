@@ -3,6 +3,8 @@ package softether
 import (
 	"log"
 	"time"
+
+	"github.com/bclswl0827/govpn"
 )
 
 const defaultMTU = 1500
@@ -57,4 +59,6 @@ type ServerConfig struct {
 	MaxConnections    int
 	MTU               int
 	Logger            *log.Logger
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 }

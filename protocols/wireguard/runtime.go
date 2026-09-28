@@ -23,7 +23,7 @@ const minimumIPv6MTU = 1280
 // cycled until one completes a handshake.
 const endpointFailoverDelay = device.RekeyTimeout - time.Second
 
-func start(addresses []netip.Prefix, mtu int, uapi string, peers []Peer, logger *log.Logger) (*govpn.Session, *Runtime, error) {
+func start(addresses []netip.Prefix, mtu int, uapi string, peers []Peer, logger *log.Logger, serverOptions *govpn.ServerSessionOptions) (*govpn.Session, *Runtime, error) {
 	memory, err := packet.New("wireguard", mtu)
 	if err != nil {
 		return nil, nil, err
@@ -43,7 +43,12 @@ func start(addresses []netip.Prefix, mtu int, uapi string, peers []Peer, logger 
 		<-wg.Wait()
 		done <- nil
 	}()
-	session, err := govpn.NewSession(addresses, uint32(mtu), memory, transport.Close, done)
+	var session *govpn.Session
+	if serverOptions == nil {
+		session, err = govpn.NewSession(addresses, uint32(mtu), memory, transport.Close, done)
+	} else {
+		session, err = govpn.NewServerSession(addresses, uint32(mtu), memory, transport.Close, done, *serverOptions)
+	}
 	if err != nil {
 		_ = transport.Close()
 		return nil, nil, err

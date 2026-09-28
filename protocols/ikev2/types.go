@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"time"
+
+	"github.com/bclswl0827/govpn"
 )
 
 const (
@@ -86,7 +88,9 @@ type ServerConfig struct {
 	DNS  []net.IP
 	MTU  int
 
-	Logger *log.Logger
+	Logger            *log.Logger
+	TrafficPolicy     govpn.TrafficPolicy
+	OnTrafficDecision govpn.TrafficPolicyCallback
 
 	// DisableForceEncapsulation has the same meaning as on Config. The default
 	// deliberately causes NAT detection so ESP stays on unprivileged UDP.

@@ -16,11 +16,13 @@ func main() {
 	flag.Parse()
 
 	server, err := l2tp.NewServer(l2tp.ServerConfig{
-		ListenIP: *listen,
-		PublicIP: *public,
-		PSK:      *psk,
-		Users:    map[string]string{*username: *password},
-		Pool:     exampleutil.InternalCIDR,
+		ListenIP:          *listen,
+		PublicIP:          *public,
+		PSK:               *psk,
+		Users:             map[string]string{*username: *password},
+		Pool:              exampleutil.InternalCIDR,
+		TrafficPolicy:     exampleutil.ExampleTrafficPolicy(),
+		OnTrafficDecision: exampleutil.LogTrafficDecision,
 	})
 	exampleutil.Must(err)
 	ctx := exampleutil.Context()

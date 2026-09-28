@@ -48,7 +48,10 @@ type PacketDevice interface {
 
 // Session exposes network operations backed by the in-process gVisor stack.
 type Session struct {
-	stack *userspacestack.Stack
+	stack             *userspacestack.Stack
+	trafficProtocol   Protocol
+	trafficPolicy     TrafficPolicy
+	onTrafficDecision TrafficPolicyCallback
 
 	closeTransport    func() error
 	terminalDone      chan struct{}
@@ -61,6 +64,16 @@ type Session struct {
 	forwardAliases    map[netip.Addr]int
 	forwards          map[*PortForward]struct{}
 	closed            bool
+}
+
+// ServerSessionOptions configures resource access control for a server-side
+// Session. SkipPacketFilter is intended for protocol adapters which evaluate
+// every client packet before it reaches the shared PacketDevice.
+type ServerSessionOptions struct {
+	Protocol          Protocol
+	TrafficPolicy     TrafficPolicy
+	OnTrafficDecision TrafficPolicyCallback
+	SkipPacketFilter  bool
 }
 
 type ICMPConn interface {
@@ -79,6 +92,27 @@ var ErrSessionClosed = net.ErrClosed
 // closeTransport tears down the protocol, while done reports its terminal
 // error. Protocol implementations use this constructor after authentication.
 func NewSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, closeTransport func() error, done <-chan error) (*Session, error) {
+	return newSession(addresses, mtu, device, closeTransport, done, ServerSessionOptions{})
+}
+
+// NewServerSession connects a server protocol packet device to a userspace
+// stack and applies TrafficPolicy to packets received from VPN clients.
+func NewServerSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, closeTransport func() error, done <-chan error, options ServerSessionOptions) (*Session, error) {
+	if options.Protocol == "" {
+		return nil, errors.New("govpn: server session protocol is required")
+	}
+	if !options.SkipPacketFilter && (options.TrafficPolicy != nil || options.OnTrafficDecision != nil) {
+		device = &trafficPacketDevice{
+			PacketDevice: device,
+			protocol:     options.Protocol,
+			policy:       options.TrafficPolicy,
+			callback:     options.OnTrafficDecision,
+		}
+	}
+	return newSession(addresses, mtu, device, closeTransport, done, options)
+}
+
+func newSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, closeTransport func() error, done <-chan error, options ServerSessionOptions) (*Session, error) {
 	if closeTransport == nil {
 		closeTransport = func() error { return nil }
 	}
@@ -90,6 +124,9 @@ func NewSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, close
 	}
 	session := &Session{
 		stack:             s,
+		trafficProtocol:   options.Protocol,
+		trafficPolicy:     options.TrafficPolicy,
+		onTrafficDecision: options.OnTrafficDecision,
 		assignedAddresses: s.Addresses(),
 		closeTransport:    closeTransport,
 		terminalDone:      make(chan struct{}),
@@ -107,6 +144,38 @@ func NewSession(addresses []netip.Prefix, mtu uint32, device PacketDevice, close
 		}()
 	}
 	return session, nil
+}
+
+type trafficPacketDevice struct {
+	PacketDevice
+	protocol Protocol
+	policy   TrafficPolicy
+	callback TrafficPolicyCallback
+}
+
+func (d *trafficPacketDevice) Receive(ctx context.Context) ([]byte, error) {
+	for {
+		packet, err := d.PacketDevice.Receive(ctx)
+		if err != nil {
+			return nil, err
+		}
+		decision := EvaluateTrafficPacket(d.policy, d.callback, d.protocol, TrafficDirectionClientIngress, packet)
+		if decision.Allowed() {
+			return packet, nil
+		}
+	}
+}
+
+// EvaluateTraffic evaluates a synthetic server-side flow, such as an
+// application proxy connection, with this Session's policy and callback.
+func (s *Session) EvaluateTraffic(flow TrafficFlow) TrafficDecision {
+	if s == nil {
+		return TrafficDecision{Action: TrafficActionDeny, Reason: "nil session"}
+	}
+	if s.trafficProtocol != "" {
+		flow.VPNProtocol = s.trafficProtocol
+	}
+	return EvaluateTraffic(s.trafficPolicy, s.onTrafficDecision, flow)
 }
 
 // Addresses returns the IP prefixes assigned to the userspace stack.

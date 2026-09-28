@@ -65,9 +65,10 @@ func (s *Server) Start(ctx context.Context) (*govpn.Session, error) {
 		return transport.Close()
 	}
 	address, _ := netip.AddrFromSlice(settings.gateway)
-	session, err := govpn.NewSession(
+	session, err := govpn.NewServerSession(
 		[]netip.Prefix{netip.PrefixFrom(address.Unmap(), settings.prefixBits)},
 		uint32(settings.mtu), device, closeTransport, done,
+		govpn.ServerSessionOptions{Protocol: govpn.ProtocolL2TP, TrafficPolicy: s.Config.TrafficPolicy, OnTrafficDecision: s.Config.OnTrafficDecision},
 	)
 	if err != nil {
 		cancelRun()
