@@ -81,12 +81,18 @@ func WriteCommand(w io.Writer, command string) error {
 }
 
 func ReadCommand(r *bufio.Reader, limit int) (string, error) {
-	command, err := r.ReadString(0)
-	if err != nil {
-		return "", err
+	var command []byte
+	for {
+		chunk, err := r.ReadSlice(0)
+		if len(command)+len(chunk) > limit {
+			return "", errors.New("openvpn: control command exceeds limit")
+		}
+		command = append(command, chunk...)
+		if err == nil {
+			return string(command[:len(command)-1]), nil
+		}
+		if err != bufio.ErrBufferFull {
+			return "", err
+		}
 	}
-	if len(command) > limit {
-		return "", errors.New("openvpn: control command exceeds limit")
-	}
-	return command[:len(command)-1], nil
 }

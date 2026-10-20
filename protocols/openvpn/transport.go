@@ -1,11 +1,14 @@
 package openvpn
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,21 +26,22 @@ type transport struct {
 		Closed() <-chan struct{}
 		Close() error
 	}
-	device       *packet.Device
-	send         dataCipher
-	receive      dataCipher
-	usePeerID    bool
-	peerID       uint32
-	compression  string
-	pingInterval time.Duration
-	pingTimeout  time.Duration
-	logger       *log.Logger
-	sendMu       sync.Mutex
-	sendActivity chan struct{}
-	lastReceive  atomic.Int64
-	pingSentLog  sync.Once
-	pingRecvLog  sync.Once
-	once         sync.Once
+	device        *packet.Device
+	send          dataCipher
+	receive       dataCipher
+	usePeerID     bool
+	peerID        uint32
+	compression   string
+	pingInterval  time.Duration
+	pingTimeout   time.Duration
+	logger        *log.Logger
+	controlReader *bufio.Reader
+	sendMu        sync.Mutex
+	sendActivity  chan struct{}
+	lastReceive   atomic.Int64
+	pingSentLog   sync.Once
+	pingRecvLog   sync.Once
+	once          sync.Once
 }
 
 func newTransport(endpoint interface {
@@ -71,7 +75,10 @@ func (t *transport) run(done chan<- error) {
 	if t.pingInterval > 0 || t.pingTimeout > 0 {
 		t.logf("keepalive configured: send-after=%s receive-timeout=%s", t.pingInterval, t.pingTimeout)
 	}
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
+	if t.controlReader != nil {
+		go func() { errCh <- t.readControlLoop() }()
+	}
 	go func() {
 		for {
 			payload, err := t.device.ReadPacket(context.Background())
@@ -147,6 +154,29 @@ func (t *transport) run(done chan<- error) {
 	}
 	_ = t.Close()
 	done <- err
+}
+
+func (t *transport) readControlLoop() error {
+	for {
+		command, err := protocol.ReadCommand(t.controlReader, 16384)
+		if err != nil {
+			if errors.Is(err, io.ErrClosedPipe) {
+				return io.EOF
+			}
+			return fmt.Errorf("openvpn: read control command: %w", err)
+		}
+		name, _, _ := strings.Cut(command, ",")
+		switch name {
+		case "INFO", "INFO_PRE", "ECHO", "AUTH_PENDING":
+			continue
+		case "RESTART", "HALT", "AUTH_FAILED":
+			return fmt.Errorf("openvpn: server requested %s", name)
+		case "PUSH_REPLY":
+			return errors.New("openvpn: tunnel parameter update requires reconnect")
+		default:
+			return fmt.Errorf("openvpn: unsupported control command %q", name)
+		}
+	}
 }
 
 var openVPNPing = []byte{0x2a, 0x18, 0x7b, 0xf3, 0x64, 0x1e, 0xb4, 0xcb, 0x07, 0xed, 0x2d, 0x0a, 0x98, 0x1f, 0xc7, 0x48}

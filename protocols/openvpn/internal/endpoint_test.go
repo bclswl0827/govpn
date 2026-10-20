@@ -8,6 +8,19 @@ import (
 )
 
 func TestEndpointReportsRekeyRequest(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		opcode byte
+	}{
+		{"hard reset", ControlHardResetServerV2},
+		{"soft reset", ControlSoftResetV1},
+	} {
+		t.Run(test.name, func(t *testing.T) { testEndpointRekey(t, test.opcode) })
+	}
+}
+
+func testEndpointRekey(t *testing.T, opcode byte) {
+	t.Helper()
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()
 	local := SessionID{1}
@@ -16,7 +29,7 @@ func TestEndpointReportsRekeyRequest(t *testing.T) {
 	defer endpoint.Close()
 
 	reset, err := EncodeControl(Packet{
-		Opcode: ControlHardResetServerV2, KeyID: 1, LocalSessionID: remote, PacketID: 1,
+		Opcode: opcode, KeyID: 1, LocalSessionID: remote, PacketID: 1,
 	})
 	if err != nil {
 		t.Fatal(err)

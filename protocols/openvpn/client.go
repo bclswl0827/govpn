@@ -183,6 +183,9 @@ func (c *Client) Start(ctx context.Context) (*govpn.Session, error) {
 	}
 	c.logf("handshake deadline cleared: transport=%s", network)
 	transport := newTransport(endpoint, device, sendCipher, receiveCipher, pushed.usePeerID, pushed.peerID, config.Compression, pushed.pingInterval, pushed.pingTimeout, config.Logger)
+	// Keep consuming TLS records and commands after PUSH_REPLY. Otherwise the
+	// endpoint's control queue eventually blocks the shared packet read loop.
+	transport.controlReader = reader
 	done := make(chan error, 1)
 	go transport.run(done)
 	addresses := make([]netip.Prefix, 0, 2)

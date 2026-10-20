@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	ControlSoftResetV1       = 3
 	ControlHardResetClientV2 = 7
 	ControlHardResetServerV2 = 8
 	Control                  = 4
@@ -39,7 +40,7 @@ type Packet struct {
 }
 
 func EncodeControl(packet Packet) ([]byte, error) {
-	if packet.Opcode != ControlHardResetClientV2 && packet.Opcode != ControlHardResetServerV2 && packet.Opcode != Control && packet.Opcode != Ack {
+	if packet.Opcode != ControlSoftResetV1 && packet.Opcode != ControlHardResetClientV2 && packet.Opcode != ControlHardResetServerV2 && packet.Opcode != Control && packet.Opcode != Ack {
 		return nil, errors.New("openvpn: invalid control opcode")
 	}
 	if packet.KeyID > 7 || len(packet.Acknowledgments) > 255 {
@@ -79,7 +80,7 @@ func DecodeControl(data []byte) (Packet, error) {
 		return Packet{}, errors.New("openvpn: truncated control packet")
 	}
 	packet := Packet{Opcode: data[0] >> 3, KeyID: data[0] & 7}
-	if packet.Opcode != ControlHardResetClientV2 && packet.Opcode != ControlHardResetServerV2 && packet.Opcode != Control && packet.Opcode != Ack {
+	if packet.Opcode != ControlSoftResetV1 && packet.Opcode != ControlHardResetClientV2 && packet.Opcode != ControlHardResetServerV2 && packet.Opcode != Control && packet.Opcode != Ack {
 		return Packet{}, fmt.Errorf("openvpn: opcode %d is not a control packet", packet.Opcode)
 	}
 	copy(packet.LocalSessionID[:], data[1:9])

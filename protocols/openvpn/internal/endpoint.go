@@ -57,7 +57,7 @@ func (e *endpoint) readLoop() {
 			continue
 		}
 		switch opcode {
-		case Control, ControlHardResetClientV2, ControlHardResetServerV2, Ack:
+		case Control, ControlSoftResetV1, ControlHardResetClientV2, ControlHardResetServerV2, Ack:
 			packet, err := DecodeControl(datagram)
 			if err != nil || packet.LocalSessionID != e.remote {
 				continue
@@ -65,7 +65,7 @@ func (e *endpoint) readLoop() {
 			if opcode != Ack {
 				_ = e.sendAck(packet.PacketID)
 			}
-			if opcode == ControlHardResetClientV2 || opcode == ControlHardResetServerV2 {
+			if opcode == ControlSoftResetV1 || opcode == ControlHardResetClientV2 || opcode == ControlHardResetServerV2 {
 				e.fail(errors.New("openvpn: data channel rekey requested; reconnect required"))
 				return
 			}
