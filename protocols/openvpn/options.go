@@ -116,8 +116,15 @@ func compressPacket(packet []byte, compression string) ([]byte, error) {
 	return nil, errors.New("openvpn: unsupported compression")
 }
 
-func decompressPacket(packet []byte, compression string) ([]byte, error) {
-	if compression == "" {
+// packetDecompressor belongs to one receive loop. Compressed output is valid
+// until the next call and must be copied before it is queued for another reader.
+type packetDecompressor struct {
+	compression string
+	buffer      []byte
+}
+
+func (d *packetDecompressor) decompress(packet []byte) ([]byte, error) {
+	if d.compression == "" {
 		return packet, nil
 	}
 	if len(packet) == 0 {
@@ -130,12 +137,14 @@ func decompressPacket(packet []byte, compression string) ([]byte, error) {
 		// An IPv4 or IPv6 packet cannot exceed 65,535 bytes. Keeping a fixed
 		// output bound also prevents a malformed compressed packet from causing
 		// unbounded allocation.
-		output := make([]byte, 65535)
-		length, err := lzo.Decompress(packet[1:], output)
+		if d.buffer == nil {
+			d.buffer = make([]byte, 65535)
+		}
+		length, err := lzo.Decompress(packet[1:], d.buffer)
 		if err != nil {
 			return nil, fmt.Errorf("openvpn: decompress LZO payload: %w", err)
 		}
-		return output[:length], nil
+		return d.buffer[:length], nil
 	default:
 		return nil, fmt.Errorf("openvpn: invalid compression marker 0x%02x", packet[0])
 	}

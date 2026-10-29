@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"golang.zx2c4.com/wireguard/tun"
 )
@@ -104,5 +105,55 @@ func TestNewRejectsInvalidMetadata(t *testing.T) {
 		if _, err := New(test.name, test.mtu); err == nil {
 			t.Fatalf("New(%q, %d) succeeded", test.name, test.mtu)
 		}
+	}
+}
+
+func TestTryWritePacketDropsCongestionAndRecovers(t *testing.T) {
+	d, err := New("test", 1400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	source := []byte{0x45, 1}
+	for range cap(d.fromProtocol) {
+		if queued, err := d.TryWritePacket(source); !queued || err != nil {
+			t.Fatalf("TryWritePacket = %t, %v", queued, err)
+		}
+	}
+	source[1] = 9
+
+	type result struct {
+		queued bool
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		queued, err := d.TryWritePacket(source)
+		done <- result{queued, err}
+	}()
+	select {
+	case result := <-done:
+		if result.queued || result.err != nil {
+			t.Fatalf("full queue = %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("full receive queue blocked the transport")
+	}
+	_, depth, drops := d.QueueStats()
+	if depth != cap(d.fromProtocol) || drops != 1 {
+		t.Fatalf("queue depth = %d, drops = %d", depth, drops)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	payload, err := d.Receive(ctx)
+	if err != nil || len(payload) != 2 || payload[1] != 1 {
+		t.Fatalf("Receive = %v, %v; want independent copy", payload, err)
+	}
+	if queued, err := d.TryWritePacket(source); !queued || err != nil {
+		t.Fatalf("queue did not recover: %t, %v", queued, err)
+	}
+	_ = d.Close()
+	if queued, err := d.TryWritePacket(source); queued || !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed queue = %t, %v", queued, err)
 	}
 }

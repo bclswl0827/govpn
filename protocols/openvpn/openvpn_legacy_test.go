@@ -33,21 +33,26 @@ func TestCompressionFraming(t *testing.T) {
 	if !bytes.Equal(framed, append([]byte{0xfa}, payload...)) {
 		t.Fatalf("framed packet = %x", framed)
 	}
-	decoded, err := decompressPacket(framed, "lzo")
+	decompressor := packetDecompressor{compression: "lzo"}
+	decoded, err := decompressor.decompress(framed)
 	if err != nil || !bytes.Equal(decoded, payload) {
 		t.Fatalf("decoded packet = %x, %v", decoded, err)
 	}
 	compressed := append([]byte{0x66, 22}, []byte("hello")...)
 	compressed = append(compressed, 0x11, 0, 0)
-	decoded, err = decompressPacket(compressed, "lzo")
+	decoded, err = decompressor.decompress(compressed)
 	if err != nil || string(decoded) != "hello" {
 		t.Fatalf("LZO decoded packet = %q, %v", decoded, err)
 	}
-	if _, err := decompressPacket([]byte{0x66, 1}, "lzo"); err == nil {
+	if _, err := decompressor.decompress([]byte{0x66, 1}); err == nil {
 		t.Fatal("invalid compressed LZO payload was accepted")
 	}
-	if _, err := decompressPacket([]byte{0x01, 1}, "lzo"); err == nil {
+	if _, err := decompressor.decompress([]byte{0x01, 1}); err == nil {
 		t.Fatal("invalid compression marker was accepted")
+	}
+	decoded, err = decompressor.decompress(compressed)
+	if err != nil || string(decoded) != "hello" {
+		t.Fatalf("decompress after invalid packet = %q, %v", decoded, err)
 	}
 }
 

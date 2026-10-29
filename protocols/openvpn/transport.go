@@ -97,6 +97,7 @@ func (t *transport) run(done chan<- error) {
 	go func() {
 		var discarded uint64
 		var nextDiscardLog time.Time
+		decompressor := packetDecompressor{compression: t.compression}
 		for {
 			select {
 			case datagram, ok := <-t.endpoint.Data():
@@ -117,7 +118,7 @@ func (t *transport) run(done chan<- error) {
 				}
 				plaintext, err := t.receive.Open(datagram[:headerLength], datagram[headerLength:])
 				if err == nil {
-					plaintext, err = decompressPacket(plaintext, t.compression)
+					plaintext, err = decompressor.decompress(plaintext)
 				}
 				if err != nil {
 					discarded++

@@ -85,6 +85,11 @@ func controlDigest(name string) (func() hash.Hash, int, error) {
 func (c *ControlChannel) Write(plain []byte) (int, error) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	// Data is already protected by the data-channel cipher. Avoid Wrap's
+	// owned copy when this synchronous write can use the caller's buffer.
+	if c.mode == ControlProtectionNone || isDataPacket(plain) {
+		return c.Conn.Write(plain)
+	}
 	wrapped, err := c.Wrap(plain)
 	if err != nil {
 		return 0, err
@@ -106,11 +111,16 @@ func (c *ControlChannel) Read(buffer []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		plain, err := c.Unwrap(c.readBuffer[:n])
-		if err != nil {
-			// Authentication failures and replayed datagrams discard one
-			// packet; they must not tear down an otherwise healthy tunnel.
-			continue
+		plain := c.readBuffer[:n]
+		// The reusable read buffer stays private until copied below; data
+		// packets do not need Unwrap's additional allocation and copy.
+		if c.mode != ControlProtectionNone && !isDataPacket(plain) {
+			plain, err = c.Unwrap(plain)
+			if err != nil {
+				// Authentication failures and replayed datagrams discard one
+				// packet; they must not tear down an otherwise healthy tunnel.
+				continue
+			}
 		}
 		if len(plain) > len(buffer) {
 			return 0, io.ErrShortBuffer
