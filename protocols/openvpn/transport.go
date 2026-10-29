@@ -95,6 +95,8 @@ func (t *transport) run(done chan<- error) {
 		go t.keepaliveLoop(errCh)
 	}
 	go func() {
+		var discarded uint64
+		var nextDiscardLog time.Time
 		for {
 			select {
 			case datagram, ok := <-t.endpoint.Data():
@@ -118,15 +120,19 @@ func (t *transport) run(done chan<- error) {
 					plaintext, err = decompressPacket(plaintext, t.compression)
 				}
 				if err != nil {
-					errCh <- err
-					return
+					discarded++
+					if now := time.Now(); !now.Before(nextDiscardLog) {
+						t.logf("discarded invalid data packets=%d latest-error=%v", discarded, err)
+						nextDiscardLog = now.Add(30 * time.Second)
+					}
+					continue
 				}
 				t.lastReceive.Store(time.Now().UnixNano())
 				if bytes.Equal(plaintext, openVPNPing) {
 					t.pingRecvLog.Do(func() { t.logf("keepalive receive confirmed") })
 					continue
 				}
-				if err := t.device.WritePacket(context.Background(), plaintext); err != nil {
+				if _, err := t.device.TryWritePacket(plaintext); err != nil {
 					errCh <- err
 					return
 				}

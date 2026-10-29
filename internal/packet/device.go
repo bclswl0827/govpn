@@ -23,6 +23,7 @@ type Device struct {
 	events       chan tun.Event
 	closed       chan struct{}
 	closedFlag   atomic.Bool
+	inboundDrops atomic.Uint64
 	closeOnce    sync.Once
 }
 

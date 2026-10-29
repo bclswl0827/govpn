@@ -39,6 +39,7 @@ type ControlChannel struct {
 	replay     replayWindow
 	readMu     sync.Mutex
 	writeMu    sync.Mutex
+	readBuffer []byte
 }
 
 func NewControlChannel(conn net.Conn, mode ControlProtection, keyValue []byte, auth string, direction int, directionSet, server bool) (*ControlChannel, error) {
@@ -97,19 +98,25 @@ func (c *ControlChannel) Write(plain []byte) (int, error) {
 func (c *ControlChannel) Read(buffer []byte) (int, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
-	wire := make([]byte, 65535)
-	n, err := c.Conn.Read(wire)
-	if err != nil {
-		return 0, err
+	if c.readBuffer == nil {
+		c.readBuffer = make([]byte, 65535)
 	}
-	plain, err := c.Unwrap(wire[:n])
-	if err != nil {
-		return 0, err
+	for {
+		n, err := c.Conn.Read(c.readBuffer)
+		if err != nil {
+			return 0, err
+		}
+		plain, err := c.Unwrap(c.readBuffer[:n])
+		if err != nil {
+			// Authentication failures and replayed datagrams discard one
+			// packet; they must not tear down an otherwise healthy tunnel.
+			continue
+		}
+		if len(plain) > len(buffer) {
+			return 0, io.ErrShortBuffer
+		}
+		return copy(buffer, plain), nil
 	}
-	if len(plain) > len(buffer) {
-		return 0, io.ErrShortBuffer
-	}
-	return copy(buffer, plain), nil
 }
 
 func (c *ControlChannel) Wrap(plain []byte) ([]byte, error) {

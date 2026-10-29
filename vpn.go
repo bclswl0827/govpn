@@ -181,6 +181,10 @@ func (s *Session) EvaluateTraffic(flow TrafficFlow) TrafficDecision {
 // Addresses returns the IP prefixes assigned to the userspace stack.
 func (s *Session) Addresses() []netip.Prefix { return s.stack.Addresses() }
 
+// Diagnostics returns a snapshot of network counters and packet queue depths.
+// Counters are cumulative for this session; queue depths are instantaneous.
+func (s *Session) Diagnostics() map[string]uint64 { return s.stack.Diagnostics() }
+
 // DialContext opens a TCP or UDP connection through the VPN.
 func (s *Session) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return s.stack.DialContext(ctx, network, address)

@@ -91,7 +91,7 @@ func (t *transport) readPackets(framer *protocol.Framer, errCh chan<- error) {
 		}
 		t.logPPP("RX", frame.Protocol, frame.Payload)
 		if frame.Protocol == protocol.PPPIPv4 {
-			if err := t.device.WritePacket(context.Background(), frame.Payload); err != nil {
+			if _, err := t.device.TryWritePacket(frame.Payload); err != nil {
 				errCh <- err
 				return
 			}

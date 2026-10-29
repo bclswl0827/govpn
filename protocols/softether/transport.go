@@ -100,9 +100,7 @@ func (t *transport) run(done chan<- error) {
 			for _, frame := range frames {
 				if t.dhcpReply != nil {
 					if reply, address, mac, ok := t.dhcpReply(frame); ok {
-						t.neighborMu.Lock()
-						t.neighbors[address] = mac
-						t.neighborMu.Unlock()
+						t.learnNeighbor(address, mac)
 						if err := t.stream.WriteFrames(reply); err != nil {
 							errCh <- err
 							return
@@ -111,9 +109,7 @@ func (t *transport) run(done chan<- error) {
 					}
 				}
 				if source, mac, ok := protocol.FrameSource(frame); ok && !source.IsUnspecified() {
-					t.neighborMu.Lock()
-					t.neighbors[source] = mac
-					t.neighborMu.Unlock()
+					t.learnNeighbor(source, mac)
 				}
 				if reply, ok := protocol.ARPReply(frame, t.localMAC, t.localIP); ok {
 					if err := t.stream.WriteFrames(reply); err != nil {
@@ -124,7 +120,7 @@ func (t *transport) run(done chan<- error) {
 				}
 				payload, ok := protocol.UnwrapIP(frame)
 				if ok {
-					if err := t.device.WritePacket(context.Background(), payload); err != nil {
+					if _, err := t.device.TryWritePacket(payload); err != nil {
 						errCh <- err
 						return
 					}
@@ -135,4 +131,25 @@ func (t *transport) run(done chan<- error) {
 	err := <-errCh
 	_ = t.Close()
 	done <- transportutil.NormalizeError(err)
+}
+
+func (t *transport) learnNeighbor(address netip.Addr, mac [6]byte) {
+	// Remote Internet hosts share the gateway's MAC. Remember only next hops
+	// we can actually send to on this Ethernet segment.
+	if !address.Is4() || address.IsUnspecified() || address.IsMulticast() ||
+		(address != t.gateway && !t.localPrefix.Contains(address)) {
+		return
+	}
+	const maxNeighbors = 256
+	t.neighborMu.Lock()
+	defer t.neighborMu.Unlock()
+	if _, exists := t.neighbors[address]; !exists && len(t.neighbors) >= maxNeighbors {
+		for candidate := range t.neighbors {
+			if candidate != t.gateway {
+				delete(t.neighbors, candidate)
+				break
+			}
+		}
+	}
+	t.neighbors[address] = mac
 }
